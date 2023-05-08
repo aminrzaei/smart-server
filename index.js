@@ -1,3 +1,5 @@
+require("dotenv").config();
+
 require("./src/models/User");
 require("./src/models/Widget");
 
@@ -28,6 +30,7 @@ app.use(actionRoutes);
 
 // MongoDB
 const mongoUri = process.env.DATABASE_URL;
+console.log(mongoUri);
 if (!mongoUri) {
   throw new Error(
     `MongoURI was not supplied.  Make sure you watch the video on setting up Mongo DB!`
