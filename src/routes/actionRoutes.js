@@ -5,13 +5,15 @@ const Widget = mongoose.model('Widget');
 const User = mongoose.model('User');
 
 const requireAuth = require('../middlewares/requireAuth');
-const socketAdder = require('../middlewares/socketAdder');
+const devicesAdder = require('../middlewares/devicesAdder');
 
 const router = express.Router();
 
+var _ = require('lodash');
+
 router.post(
   '/action/led/switch',
-  socketAdder,
+  devicesAdder,
   requireAuth,
   async (req, res) => {
     const widgetName = 'LED Control';
@@ -37,7 +39,9 @@ router.post(
             if (err) res.status(422).send(err.message);
           });
 
-          req.io.to(arduinoToken).emit('led-switch', { state: newState });
+          const msg = { eventName: 'switch-led', payload: newState };
+
+          req.devices[arduinoToken].send(JSON.stringify(msg));
           res.send({ msg: `Widget state set to ${newState}` });
         } else {
           res.status(422).send(err.message);
@@ -49,9 +53,16 @@ router.post(
   }
 );
 
-router.get('/action/led/switch', socketAdder, (req, res) => {
-  req.io.to('sometoken').emit('led-switch', { state: 'on' });
-  res.send('Socket Fired !!!');
+router.get('/turn-on', devicesAdder, async (req, res) => {
+  const msg = { eventName: 'switch-led', payload: 'on' };
+  req.devices['87e2f588-0dd8-4c0d-a12f-98e682c6ba54'].send(JSON.stringify(msg));
+  res.send({ msg: 'ON' });
+});
+
+router.get('/turn-off', devicesAdder, async (req, res) => {
+  const msg = { eventName: 'switch-led', payload: 'off' };
+  req.devices['87e2f588-0dd8-4c0d-a12f-98e682c6ba54'].send(JSON.stringify(msg));
+  res.send({ msg: 'OFF' });
 });
 
 module.exports = router;

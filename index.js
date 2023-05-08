@@ -1,30 +1,33 @@
-require('./src/models/User');
-require('./src/models/Widget');
+require("./src/models/User");
+require("./src/models/Widget");
 
-const express = require('express');
-const http = require('http');
-const socket = require('socket.io');
+const express = require("express");
+const http = require("http");
+const WebSocket = require("ws");
 
 const app = express();
 const server = http.createServer(app);
-const io = (module.exports.io = socket(server));
+const wss = new WebSocket.Server({ server });
+const devices = (module.exports.devices = {});
 
-const PORT = process.env.PORT || 3000;
+var _ = require("lodash");
 
-const mongoose = require('mongoose');
-const bodyParser = require('body-parser');
-const authRoutes = require('./src/routes/authRoutes');
-const widgetRoutes = require('./src/routes/widgetRoutes');
-const actionRoutes = require('./src/routes/actionRoutes');
-const requireAuth = require('./src/middlewares/requireAuth');
+const PORT = process.env.PORT || 80;
+
+const mongoose = require("mongoose");
+const bodyParser = require("body-parser");
+const authRoutes = require("./src/routes/authRoutes");
+const widgetRoutes = require("./src/routes/widgetRoutes");
+const actionRoutes = require("./src/routes/actionRoutes");
+const requireAuth = require("./src/middlewares/requireAuth");
 
 app.use(bodyParser.json());
 app.use(authRoutes);
 app.use(widgetRoutes);
 app.use(actionRoutes);
 
-const mongoUri =
-  'mongodb+srv://amin:A7667min@cluster0.ikvxk.mongodb.net/smart?retryWrites=true&w=majority';
+// MongoDB
+const mongoUri = process.env.DATABASE_URL;
 if (!mongoUri) {
   throw new Error(
     `MongoURI was not supplied.  Make sure you watch the video on setting up Mongo DB!`
@@ -34,29 +37,41 @@ mongoose.connect(mongoUri, {
   useNewUrlParser: true,
   useCreateIndex: true,
 });
-mongoose.connection.on('connected', () => {
-  console.log('Connected to mongo instance');
+mongoose.connection.on("connected", () => {
+  console.log("Connected to mongo instance");
 });
-mongoose.connection.on('error', (err) => {
-  console.error('Error connecting to mongo', err);
+mongoose.connection.on("error", (err) => {
+  console.error("Error connecting to mongo", err);
 });
 
-app.get('/', requireAuth, (req, res) => {
+// Websocket
+wss.on("connection", function connection(ws, request) {
+  console.log("A device connected!");
+
+  const tokenReqMsg = { eventName: "token-req-msg", payload: {} };
+  ws.send(JSON.stringify(tokenReqMsg));
+
+  ws.on("message", function incoming(data) {
+    const msg = JSON.parse(data);
+    if (msg.eventName === "arduino-token") {
+      ws.ardToken = msg.payload;
+      _.set(devices, msg.payload, ws);
+    }
+  });
+
+  ws.on("close", () => {
+    _.omit(devices, ws.ardToken);
+  });
+});
+
+app.get("/devices", (req, res) => {
+  res.send({ allDevices: devices });
+});
+
+app.get("/", requireAuth, (req, res) => {
   res.send(`Your email: ${req.user.email}`);
 });
 
-io.on('connection', (client) => {
-  console.log(`Connected... ==> ${client.id}`);
-
-  client.on('arduinoToken', (token) => {
-    client.join(token);
-  });
-
-  client.on('disconnect', () => {
-    console.log(`Disconnected... ==> ${client.id}`);
-  });
-});
-
 server.listen(PORT, function () {
-  console.log('Server listening on port 3000');
+  console.log(`Server listening on port ${PORT}`);
 });
